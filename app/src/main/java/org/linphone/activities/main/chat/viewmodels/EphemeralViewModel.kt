@@ -32,7 +32,7 @@ class EphemeralViewModelFactory(private val chatRoom: ChatRoom) :
     ViewModelProvider.NewInstanceFactory() {
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return EphemeralViewModel(chatRoom) as T
     }
 }
@@ -50,7 +50,7 @@ class EphemeralViewModel(private val chatRoom: ChatRoom) : ViewModel() {
     }
 
     init {
-        Log.i("[Ephemeral Messages] Current duration is ${chatRoom.ephemeralLifetime}, ephemeral enabled? ${chatRoom.ephemeralEnabled()}")
+        Log.i("[Ephemeral Messages] Current lifetime is ${chatRoom.ephemeralLifetime}, ephemeral enabled? ${chatRoom.ephemeralEnabled()}")
         currentSelectedDuration = if (chatRoom.ephemeralEnabled()) chatRoom.ephemeralLifetime else 0
         computeEphemeralDurationValues()
     }

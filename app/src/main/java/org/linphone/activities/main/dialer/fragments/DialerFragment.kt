@@ -19,16 +19,21 @@
  */
 package org.linphone.activities.main.dialer.fragments
 
+import android.Manifest
+import android.annotation.TargetApi
 import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.transition.MaterialSharedAxis
 import org.linphone.BuildConfig
 import org.linphone.LinphoneApplication.Companion.coreContext
 import org.linphone.LinphoneApplication.Companion.corePreferences
@@ -42,8 +47,11 @@ import org.linphone.activities.navigateToConfigFileViewer
 import org.linphone.activities.navigateToContacts
 import org.linphone.core.tools.Log
 import org.linphone.databinding.DialerFragmentBinding
+import org.linphone.mediastream.Version
 import org.linphone.utils.AppUtils
 import org.linphone.utils.DialogUtils
+import org.linphone.utils.Event
+import org.linphone.utils.PermissionHelper
 
 class DialerFragment : SecureFragment<DialerFragmentBinding>() {
     private lateinit var viewModel: DialerViewModel
@@ -56,24 +64,48 @@ class DialerFragment : SecureFragment<DialerFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
-        viewModel = ViewModelProvider(this).get(DialerViewModel::class.java)
+        viewModel = ViewModelProvider(this)[DialerViewModel::class.java]
         binding.viewModel = viewModel
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedMainViewModel::class.java)
+            ViewModelProvider(this)[SharedMainViewModel::class.java]
         }
 
+        useMaterialSharedAxisXForwardAnimation = false
+        sharedViewModel.updateDialerAnimationsBasedOnDestination.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { id ->
+                    val forward = when (id) {
+                        R.id.masterChatRoomsFragment -> false
+                        else -> true
+                    }
+                    if (corePreferences.enableAnimations) {
+                        val portraitOrientation = resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+                        val axis = if (portraitOrientation) MaterialSharedAxis.X else MaterialSharedAxis.Y
+                        enterTransition = MaterialSharedAxis(axis, forward)
+                        reenterTransition = MaterialSharedAxis(axis, forward)
+                        returnTransition = MaterialSharedAxis(axis, !forward)
+                        exitTransition = MaterialSharedAxis(axis, !forward)
+                    }
+                }
+            }
+        )
+
         binding.setNewContactClickListener {
+            sharedViewModel.updateDialerAnimationsBasedOnDestination.value = Event(R.id.masterContactsFragment)
+            sharedViewModel.updateContactsAnimationsBasedOnDestination.value = Event(R.id.dialerFragment)
             navigateToContacts(viewModel.enteredUri.value)
         }
 
         binding.setTransferCallClickListener {
-            viewModel.transferCall()
-            // Transfer has been consumed
-            sharedViewModel.pendingCallTransfer = false
-            viewModel.transferVisibility.value = false
+            if (viewModel.transferCall()) {
+                // Transfer has been consumed, otherwise it might have been a "bis" use
+                sharedViewModel.pendingCallTransfer = false
+                viewModel.transferVisibility.value = false
+            }
         }
 
         if (arguments?.containsKey("Transfer") == true) {
@@ -95,40 +127,53 @@ class DialerFragment : SecureFragment<DialerFragmentBinding>() {
         }
         arguments?.clear()
 
-        viewModel.enteredUri.observe(viewLifecycleOwner, {
-            if (it == corePreferences.debugPopupCode) {
-                displayDebugPopup()
-                viewModel.enteredUri.value = ""
-            }
-        })
-
-        viewModel.uploadFinishedEvent.observe(viewLifecycleOwner, {
-            it.consume { url ->
-                // To prevent being trigger when using the Send Logs button in About page
-                if (uploadLogsInitiatedByUs) {
-                    val clipboard =
-                        requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Logs url", url)
-                    clipboard.setPrimaryClip(clip)
-
-                    val activity = requireActivity() as MainActivity
-                    activity.showSnackBar(R.string.logs_url_copied_to_clipboard)
-
-                    AppUtils.shareUploadedLogsUrl(activity, url)
+        viewModel.enteredUri.observe(
+            viewLifecycleOwner,
+            {
+                if (it == corePreferences.debugPopupCode) {
+                    displayDebugPopup()
+                    viewModel.enteredUri.value = ""
                 }
             }
-        })
+        )
 
-        viewModel.updateAvailableEvent.observe(viewLifecycleOwner, {
-            it.consume { url ->
-                displayNewVersionAvailableDialog(url)
+        viewModel.uploadFinishedEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { url ->
+                    // To prevent being trigger when using the Send Logs button in About page
+                    if (uploadLogsInitiatedByUs) {
+                        val clipboard =
+                            requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Logs url", url)
+                        clipboard.setPrimaryClip(clip)
+
+                        val activity = requireActivity() as MainActivity
+                        activity.showSnackBar(R.string.logs_url_copied_to_clipboard)
+
+                        AppUtils.shareUploadedLogsUrl(activity, url)
+                    }
+                }
             }
-        })
+        )
+
+        viewModel.updateAvailableEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { url ->
+                    displayNewVersionAvailableDialog(url)
+                }
+            }
+        )
 
         Log.i("[Dialer] Pending call transfer mode = ${sharedViewModel.pendingCallTransfer}")
         viewModel.transferVisibility.value = sharedViewModel.pendingCallTransfer
 
         checkForUpdate()
+
+        if (Version.sdkAboveOrEqual(Version.API23_MARSHMALLOW_60)) {
+            checkPermissions()
+        }
     }
 
     override fun onPause() {
@@ -148,6 +193,28 @@ class DialerFragment : SecureFragment<DialerFragmentBinding>() {
         uploadLogsInitiatedByUs = false
 
         viewModel.enteredUri.value = sharedViewModel.dialerUri
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (requestCode == 0) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.i("[Dialer] READ_PHONE_STATE permission has been granted")
+                coreContext.initPhoneStateListener()
+            }
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    @TargetApi(Version.API23_MARSHMALLOW_60)
+    private fun checkPermissions() {
+        if (!PermissionHelper.get().hasReadPhoneStatePermission()) {
+            Log.i("[Dialer] Asking for READ_PHONE_STATE permission")
+            requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), 0)
+        }
     }
 
     private fun displayDebugPopup() {
@@ -204,11 +271,14 @@ class DialerFragment : SecureFragment<DialerFragmentBinding>() {
             dialog.dismiss()
         }
 
-        viewModel.showOkButton({
-            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            startActivity(browserIntent)
-            dialog.dismiss()
-        }, getString(R.string.dialog_ok))
+        viewModel.showOkButton(
+            {
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(browserIntent)
+                dialog.dismiss()
+            },
+            getString(R.string.dialog_ok)
+        )
 
         dialog.show()
     }

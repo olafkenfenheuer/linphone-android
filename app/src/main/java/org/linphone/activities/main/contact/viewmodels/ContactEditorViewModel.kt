@@ -40,7 +40,7 @@ class ContactEditorViewModelFactory(private val contact: Contact?) :
     ViewModelProvider.NewInstanceFactory() {
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return ContactEditorViewModel(contact) as T
     }
 }
@@ -166,12 +166,15 @@ class ContactEditorViewModel(val c: Contact?) : ViewModel(), ContactDataInterfac
         }
 
         when (orientation) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> image =
-                ImageUtils.rotateImage(image, 90f)
-            ExifInterface.ORIENTATION_ROTATE_180 -> image =
-                ImageUtils.rotateImage(image, 180f)
-            ExifInterface.ORIENTATION_ROTATE_270 -> image =
-                ImageUtils.rotateImage(image, 270f)
+            ExifInterface.ORIENTATION_ROTATE_90 ->
+                image =
+                    ImageUtils.rotateImage(image, 90f)
+            ExifInterface.ORIENTATION_ROTATE_180 ->
+                image =
+                    ImageUtils.rotateImage(image, 180f)
+            ExifInterface.ORIENTATION_ROTATE_270 ->
+                image =
+                    ImageUtils.rotateImage(image, 270f)
         }
 
         val stream = ByteArrayOutputStream()

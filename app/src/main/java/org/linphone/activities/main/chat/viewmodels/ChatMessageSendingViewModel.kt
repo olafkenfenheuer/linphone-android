@@ -48,7 +48,7 @@ class ChatMessageSendingViewModelFactory(private val chatRoom: ChatRoom) :
     ViewModelProvider.NewInstanceFactory() {
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return ChatMessageSendingViewModel(chatRoom) as T
     }
 }
@@ -149,9 +149,11 @@ class ChatMessageSendingViewModel(private val chatRoom: ChatRoom) : ViewModel() 
     fun addAttachment(path: String) {
         val list = arrayListOf<ChatMessageAttachmentData>()
         list.addAll(attachments.value.orEmpty())
-        list.add(ChatMessageAttachmentData(path) {
-            removeAttachment(it)
-        })
+        list.add(
+            ChatMessageAttachmentData(path) {
+                removeAttachment(it)
+            }
+        )
         attachments.value = list
 
         sendMessageEnabled.value = textToSend.value.orEmpty().isNotEmpty() || list.isNotEmpty() || isPendingVoiceRecord.value == true

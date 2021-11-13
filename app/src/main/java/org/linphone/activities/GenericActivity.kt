@@ -23,20 +23,20 @@ import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Display
 import android.view.Surface
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.util.Consumer
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.ActivityNavigator
-import androidx.window.FoldingFeature
-import androidx.window.WindowLayoutInfo
-import androidx.window.WindowManager
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoRepository.Companion.windowInfoRepository
+import androidx.window.layout.WindowLayoutInfo
 import java.util.*
-import java.util.concurrent.Executor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.linphone.LinphoneApplication.Companion.coreContext
 import org.linphone.LinphoneApplication.Companion.corePreferences
 import org.linphone.LinphoneApplication.Companion.ensureCoreExists
@@ -49,58 +49,19 @@ abstract class GenericActivity : AppCompatActivity() {
     val isDestructionPending: Boolean
         get() = _isDestructionPending
 
-    private lateinit var windowManagerX: WindowManager
-
-    inner class LayoutStateChangeCallback : Consumer<WindowLayoutInfo> {
-        override fun accept(newLayoutInfo: WindowLayoutInfo) {
-            Log.i("[Layout State Change] $newLayoutInfo")
-
-            if (newLayoutInfo.displayFeatures.isEmpty()) {
-                onLayoutChanges(null)
-            } else {
-                for (feature in newLayoutInfo.displayFeatures) {
-                    val foldingFeature = feature as? FoldingFeature
-                    if (foldingFeature != null) {
-                        onLayoutChanges(foldingFeature)
-                    }
-                }
-            }
-        }
-    }
-    private val layoutStateChangeCallback = LayoutStateChangeCallback()
-
-    private fun runOnUiThreadExecutor(): Executor {
-        val handler = Handler(Looper.getMainLooper())
-        return Executor() {
-            handler.post(it)
-        }
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-
-        windowManagerX.registerLayoutChangeCallback(
-            runOnUiThreadExecutor(),
-            layoutStateChangeCallback
-        )
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-
-        windowManagerX.unregisterLayoutChangeCallback(layoutStateChangeCallback)
-    }
-
-    open fun onLayoutChanges(foldingFeature: FoldingFeature?) {
-    }
+    open fun onLayoutChanges(foldingFeature: FoldingFeature?) { }
 
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        windowManagerX = WindowManager(this)
-
         ensureCoreExists(applicationContext)
+
+        lifecycleScope.launch(Dispatchers.Main) {
+            windowInfoRepository().windowLayoutInfo.collect { newLayoutInfo ->
+                updateCurrentLayout(newLayoutInfo)
+            }
+        }
 
         requestedOrientation = if (corePreferences.forcePortrait) {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -169,5 +130,18 @@ abstract class GenericActivity : AppCompatActivity() {
         val screenHeight = metrics.heightPixels.toFloat()
         coreContext.screenWidth = screenWidth
         coreContext.screenHeight = screenHeight
+    }
+
+    private fun updateCurrentLayout(newLayoutInfo: WindowLayoutInfo) {
+        if (newLayoutInfo.displayFeatures.isEmpty()) {
+            onLayoutChanges(null)
+        } else {
+            for (feature in newLayoutInfo.displayFeatures) {
+                val foldingFeature = feature as? FoldingFeature
+                if (foldingFeature != null) {
+                    onLayoutChanges(foldingFeature)
+                }
+            }
+        }
     }
 }

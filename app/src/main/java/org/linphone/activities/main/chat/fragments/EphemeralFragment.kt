@@ -43,10 +43,10 @@ class EphemeralFragment : SecureFragment<ChatRoomEphemeralFragmentBinding>() {
         super.onViewCreated(view, savedInstanceState)
 
         isSecure = true
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedMainViewModel::class.java)
+            ViewModelProvider(this)[SharedMainViewModel::class.java]
         }
 
         val chatRoom = sharedViewModel.selectedChatRoom.value

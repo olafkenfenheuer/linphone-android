@@ -49,9 +49,9 @@ class RecordingsFragment : MasterFragment<RecordingsFragmentBinding, RecordingsL
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
-        viewModel = ViewModelProvider(this).get(RecordingsViewModel::class.java)
+        viewModel = ViewModelProvider(this)[RecordingsViewModel::class.java]
         binding.viewModel = viewModel
 
         _adapter = RecordingsListAdapter(listSelectionViewModel, viewLifecycleOwner)
@@ -68,9 +68,12 @@ class RecordingsFragment : MasterFragment<RecordingsFragmentBinding, RecordingsL
         val headerItemDecoration = RecyclerViewHeaderDecoration(requireContext(), adapter)
         binding.recordingsList.addItemDecoration(headerItemDecoration)
 
-        viewModel.recordingsList.observe(viewLifecycleOwner, { recordings ->
-            adapter.submitList(recordings)
-        })
+        viewModel.recordingsList.observe(
+            viewLifecycleOwner,
+            { recordings ->
+                adapter.submitList(recordings)
+            }
+        )
 
         binding.setBackClickListener { goBack() }
 

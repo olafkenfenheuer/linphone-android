@@ -45,13 +45,14 @@ class StatusFragment : GenericFragment<CallStatusFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
+        useMaterialSharedAxisXForwardAnimation = false
 
-        viewModel = ViewModelProvider(this).get(StatusViewModel::class.java)
+        viewModel = ViewModelProvider(this)[StatusViewModel::class.java]
         binding.viewModel = viewModel
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedCallViewModel::class.java)
+            ViewModelProvider(this)[SharedCallViewModel::class.java]
         }
 
         binding.setStatsClickListener {
@@ -62,13 +63,16 @@ class StatusFragment : GenericFragment<CallStatusFragmentBinding>() {
             viewModel.refreshRegister()
         }
 
-        viewModel.showZrtpDialogEvent.observe(viewLifecycleOwner, {
-            it.consume { call ->
-                if (call.state == Call.State.Connected || call.state == Call.State.StreamsRunning) {
-                    showZrtpDialog(call)
+        viewModel.showZrtpDialogEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { call ->
+                    if (call.state == Call.State.Connected || call.state == Call.State.StreamsRunning) {
+                        showZrtpDialog(call)
+                    }
                 }
             }
-        })
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -117,19 +121,25 @@ class StatusFragment : GenericFragment<CallStatusFragmentBinding>() {
 
         val dialog: Dialog = DialogUtils.getDialog(requireContext(), viewModel)
 
-        viewModel.showDeleteButton({
-            call.authenticationTokenVerified = false
-            this@StatusFragment.viewModel.updateEncryptionInfo(call)
-            dialog.dismiss()
-            zrtpDialog = null
-        }, getString(R.string.zrtp_dialog_deny_button_label))
+        viewModel.showDeleteButton(
+            {
+                call.authenticationTokenVerified = false
+                this@StatusFragment.viewModel.updateEncryptionInfo(call)
+                dialog.dismiss()
+                zrtpDialog = null
+            },
+            getString(R.string.zrtp_dialog_deny_button_label)
+        )
 
-        viewModel.showOkButton({
-            call.authenticationTokenVerified = true
-            this@StatusFragment.viewModel.updateEncryptionInfo(call)
-            dialog.dismiss()
-            zrtpDialog = null
-        }, getString(R.string.zrtp_dialog_ok_button_label))
+        viewModel.showOkButton(
+            {
+                call.authenticationTokenVerified = true
+                this@StatusFragment.viewModel.updateEncryptionInfo(call)
+                dialog.dismiss()
+                zrtpDialog = null
+            },
+            getString(R.string.zrtp_dialog_ok_button_label)
+        )
 
         zrtpDialog = dialog
         dialog.show()

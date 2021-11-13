@@ -36,7 +36,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import org.linphone.LinphoneApplication
 import org.linphone.LinphoneApplication.Companion.coreContext
 import org.linphone.R
 import org.linphone.core.tools.Log
@@ -265,9 +264,9 @@ class FileUtils {
                     context.contentResolver.openInputStream(uri)
                 Log.i(
                     "[File Utils] Trying to copy file from " +
-                            uri.toString() +
-                            " to local file " +
-                            localFile.absolutePath
+                        uri.toString() +
+                        " to local file " +
+                        localFile.absolutePath
                 )
                 coroutineScope {
                     val deferred = async { copyToFile(remoteFile, localFile) }
@@ -417,7 +416,8 @@ class FileUtils {
                     } catch (e: Exception) {
                         Log.e(
                             "[Chat Message] Couldn't get URI for file $file using file provider ${context.getString(
-                                R.string.file_provider)}"
+                                R.string.file_provider
+                            )}"
                         )
                         Uri.parse(path)
                     }
@@ -464,9 +464,6 @@ class FileUtils {
 
             try {
                 activity.startActivity(intent)
-                if (LinphoneApplication.corePreferences.enableAnimations) {
-                    activity.overridePendingTransition(R.anim.enter_right, R.anim.exit_left)
-                }
                 return true
             } catch (anfe: ActivityNotFoundException) {
                 Log.e("[File Viewer] Can't open file in third party app: $anfe")

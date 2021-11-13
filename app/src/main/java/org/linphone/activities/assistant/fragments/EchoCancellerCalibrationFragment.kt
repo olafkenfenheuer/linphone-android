@@ -38,16 +38,19 @@ class EchoCancellerCalibrationFragment : GenericFragment<AssistantEchoCancellerC
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
-        viewModel = ViewModelProvider(this).get(EchoCancellerCalibrationViewModel::class.java)
+        viewModel = ViewModelProvider(this)[EchoCancellerCalibrationViewModel::class.java]
         binding.viewModel = viewModel
 
-        viewModel.echoCalibrationTerminated.observe(viewLifecycleOwner, {
-            it.consume {
-                requireActivity().finish()
+        viewModel.echoCalibrationTerminated.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    requireActivity().finish()
+                }
             }
-        })
+        )
 
         if (!PermissionHelper.required(requireContext()).hasRecordAudioPermission()) {
             Log.i("[Echo Canceller Calibration] Asking for RECORD_AUDIO permission")

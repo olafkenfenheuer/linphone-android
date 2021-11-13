@@ -7,6 +7,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">&appName;</string>
     <string name="app_name_debug" translatable="false">&appName; (debug)</string>
+    <string name="user_agent_app_name" translatable="false">&appName;Android</string>
     <string name="service_name">&appName; Service</string>
     <string name="service_auto_start_description">&appName; has been started automatically</string>
     <string name="service_description">This is required to receive calls while in background</string>
@@ -220,6 +221,12 @@
     <string name="chat_room_sending_message_hint">Message</string>
     <string name="chat_message_voice_recording_hold_to_record">Hold button to record voice message</string>
     <string name="chat_message_voice_recording_playback_low_volume">Your media volume is low, you may want to increase it</string>
+    <string name="chat_room_unread_message">%1$d unread message</string>
+    <string name="chat_room_unread_messages">%1$d unread messages</string>
+    <plurals name="chat_room_unread_messages_event">
+        <item quantity="one">@string/chat_room_unread_message</item>
+        <item quantity="other">@string/chat_room_unread_messages</item>
+    </plurals>
 
     <!-- Recordings -->
     <string name="recordings_empty_list">No recordings</string>
@@ -400,6 +407,8 @@
     <string name="call_settings_media_encryption_zrtp">ZRTP</string>
     <string name="call_settings_media_encryption_dtls">DTLS</string>
     <string name="call_settings_encryption_mandatory_title">Media encryption mandatory</string>
+    <string name="call_settings_use_telecom_manager_title">Improve interactions with bluetooth devices</string>
+    <string name="call_settings_use_telecom_manager_summary">Requires some extra permissions</string>
     <string name="call_settings_full_screen_title">Full screen app while in call</string>
     <string name="call_settings_full_screen_summary">Hides status and navigation bars</string>
     <string name="call_settings_overlay_title">Overlay call notification</string>

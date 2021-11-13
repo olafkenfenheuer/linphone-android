@@ -36,9 +36,9 @@ class AboutFragment : SecureFragment<AboutFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
-        viewModel = ViewModelProvider(this).get(AboutViewModel::class.java)
+        viewModel = ViewModelProvider(this)[AboutViewModel::class.java]
         binding.viewModel = viewModel
 
         binding.setBackClickListener { goBack() }

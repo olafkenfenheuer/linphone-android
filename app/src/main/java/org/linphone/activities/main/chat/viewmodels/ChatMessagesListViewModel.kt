@@ -23,6 +23,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import java.util.*
+import kotlin.math.max
 import org.linphone.activities.main.chat.data.EventLogData
 import org.linphone.core.*
 import org.linphone.core.tools.Log
@@ -35,7 +36,7 @@ class ChatMessagesListViewModelFactory(private val chatRoom: ChatRoom) :
     ViewModelProvider.NewInstanceFactory() {
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return ChatMessagesListViewModel(chatRoom) as T
     }
 }
@@ -70,7 +71,7 @@ class ChatMessagesListViewModel(private val chatRoom: ChatRoom) : ViewModel() {
                     return
                 }
 
-                if (Version.sdkStrictlyBelow(Version.API29_ANDROID_10) && !PermissionHelper.get().hasWriteExternalStorage()) {
+                if (Version.sdkStrictlyBelow(Version.API29_ANDROID_10) && !PermissionHelper.get().hasWriteExternalStoragePermission()) {
                     for (content in chatMessage.contents) {
                         if (content.isFileTransfer) {
                             Log.i("[Chat Messages] Android < 10 detected and WRITE_EXTERNAL_STORAGE permission isn't granted yet")
@@ -212,10 +213,32 @@ class ChatMessagesListViewModel(private val chatRoom: ChatRoom) : ViewModel() {
 
     private fun getEvents(): ArrayList<EventLogData> {
         val list = arrayListOf<EventLogData>()
-        val history = chatRoom.getHistoryEvents(MESSAGES_PER_PAGE)
+        val unreadCount = chatRoom.unreadMessagesCount
+        var loadCount = max(MESSAGES_PER_PAGE, unreadCount)
+        Log.i("[Chat Messages] $unreadCount unread messages in this chat room, loading $loadCount from history")
+
+        val history = chatRoom.getHistoryEvents(loadCount)
+        var messageCount = 0
         for (eventLog in history) {
             list.add(EventLogData(eventLog))
+            if (eventLog.type == EventLog.Type.ConferenceChatMessage) {
+                messageCount += 1
+            }
         }
+
+        // Load enough events to have at least all unread messages
+        while (unreadCount > 0 && messageCount < unreadCount) {
+            Log.w("[Chat Messages] There is only $messageCount messages in the last $loadCount events, loading $MESSAGES_PER_PAGE more")
+            val moreHistory = chatRoom.getHistoryRangeEvents(loadCount, loadCount + MESSAGES_PER_PAGE)
+            loadCount += MESSAGES_PER_PAGE
+            for (eventLog in moreHistory) {
+                list.add(EventLogData(eventLog))
+                if (eventLog.type == EventLog.Type.ConferenceChatMessage) {
+                    messageCount += 1
+                }
+            }
+        }
+
         return list
     }
 

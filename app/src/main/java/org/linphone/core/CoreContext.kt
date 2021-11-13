@@ -27,7 +27,6 @@ import android.os.Handler
 import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
 import android.util.Base64
 import android.util.Pair
@@ -56,11 +55,13 @@ import org.linphone.activities.call.CallActivity
 import org.linphone.activities.call.IncomingCallActivity
 import org.linphone.activities.call.OutgoingCallActivity
 import org.linphone.compatibility.Compatibility
+import org.linphone.compatibility.PhoneStateInterface
 import org.linphone.contact.Contact
 import org.linphone.contact.ContactsManager
 import org.linphone.core.tools.Log
 import org.linphone.mediastream.Version
 import org.linphone.notifications.NotificationsManager
+import org.linphone.telecom.TelecomHelper
 import org.linphone.utils.*
 import org.linphone.utils.Event
 
@@ -73,9 +74,9 @@ class CoreContext(val context: Context, coreConfig: Config) {
     var screenHeight: Float = 0f
 
     val appVersion: String by lazy {
-        val appVersion = org.linphone.BuildConfig.VERSION_NAME
+        val appVersion = BuildConfig.VERSION_NAME
         val appBranch = context.getString(R.string.linphone_app_branch)
-        val appBuildType = org.linphone.BuildConfig.BUILD_TYPE
+        val appBuildType = BuildConfig.BUILD_TYPE
         "$appVersion ($appBranch, $appBuildType)"
     }
 
@@ -99,37 +100,13 @@ class CoreContext(val context: Context, coreConfig: Config) {
     }
 
     private val loggingService = Factory.instance().loggingService
-
     private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
-    private var gsmCallActive = false
-    private val phoneStateListener = object : PhoneStateListener() {
-        override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-            gsmCallActive = when (state) {
-                TelephonyManager.CALL_STATE_OFFHOOK -> {
-                    Log.i("[Context] Phone state is off hook")
-                    true
-                }
-                TelephonyManager.CALL_STATE_RINGING -> {
-                    Log.i("[Context] Phone state is ringing")
-                    true
-                }
-                TelephonyManager.CALL_STATE_IDLE -> {
-                    Log.i("[Context] Phone state is idle")
-                    false
-                }
-                else -> {
-                    Log.w("[Context] Phone state is unexpected: $state")
-                    false
-                }
-            }
-        }
-    }
 
     private var overlayX = 0f
     private var overlayY = 0f
     private var callOverlay: View? = null
     private var previousCallState = Call.State.Idle
+    private lateinit var phoneStateListener: PhoneStateInterface
 
     private val listener: CoreListenerStub = object : CoreListenerStub() {
         override fun onGlobalStateChanged(core: Core, state: GlobalState, message: String) {
@@ -159,10 +136,29 @@ class CoreContext(val context: Context, coreConfig: Config) {
         ) {
             Log.i("[Context] Call state changed [$state]")
             if (state == Call.State.IncomingReceived || state == Call.State.IncomingEarlyMedia) {
-                if (gsmCallActive) {
-                    Log.w("[Context] Refusing the call with reason busy because a GSM call is active")
-                    call.decline(Reason.Busy)
-                    return
+                if (!corePreferences.useTelecomManager) { // Can't use the following call with Telecom Manager API as it will "fake" GSM calls
+                    var gsmCallActive = false
+                    if (::phoneStateListener.isInitialized) {
+                        gsmCallActive = phoneStateListener.isInCall()
+                    }
+
+                    if (gsmCallActive) {
+                        Log.w("[Context] Refusing the call with reason busy because a GSM call is active")
+                        call.decline(Reason.Busy)
+                        return
+                    }
+                } else {
+                    if (TelecomHelper.exists()) {
+                        if (!TelecomHelper.get().isIncomingCallPermitted() ||
+                            TelecomHelper.get().isInManagedCall()
+                        ) {
+                            Log.w("[Context] Refusing the call with reason busy because Telecom Manager will reject the call")
+                            call.decline(Reason.Busy)
+                            return
+                        }
+                    } else {
+                        Log.e("[Context] Telecom Manager singleton wasn't created!")
+                    }
                 }
 
                 // Starting SDK 24 (Android 7.0) we rely on the fullscreen intent of the call incoming notification
@@ -178,10 +174,13 @@ class CoreContext(val context: Context, coreConfig: Config) {
                     } else {
                         Log.i("[Context] Scheduling auto answering in $autoAnswerDelay milliseconds")
                         val mainThreadHandler = Handler(Looper.getMainLooper())
-                        mainThreadHandler.postDelayed({
-                            Log.w("[Context] Auto answering call")
-                            answerCall(call)
-                        }, autoAnswerDelay.toLong())
+                        mainThreadHandler.postDelayed(
+                            {
+                                Log.w("[Context] Auto answering call")
+                                answerCall(call)
+                            },
+                            autoAnswerDelay.toLong()
+                        )
                     }
                 }
             } else if (state == Call.State.OutgoingInit) {
@@ -214,7 +213,8 @@ class CoreContext(val context: Context, coreConfig: Config) {
                     // Do not turn speaker on when video is enabled if headset or bluetooth is used
                     if (!AudioRouteUtils.isHeadsetAudioRouteAvailable() && !AudioRouteUtils.isBluetoothAudioRouteCurrentlyUsed(
                             call
-                        )) {
+                        )
+                    ) {
                         Log.i("[Context] Video enabled and no wired headset not bluetooth in use, routing audio to speaker")
                         AudioRouteUtils.routeAudioToSpeaker(call)
                     }
@@ -237,8 +237,9 @@ class CoreContext(val context: Context, coreConfig: Config) {
                     }
                     callErrorMessageResourceId.value = Event(message)
                 } else if (state == Call.State.End &&
-                        call.dir == Call.Dir.Outgoing &&
-                        call.errorInfo.reason == Reason.Declined) {
+                    call.dir == Call.Dir.Outgoing &&
+                    call.errorInfo.reason == Reason.Declined
+                ) {
                     Log.i("[Context] Call has been declined")
                     val message = context.getString(R.string.call_error_declined)
                     callErrorMessageResourceId.value = Event(message)
@@ -298,7 +299,6 @@ class CoreContext(val context: Context, coreConfig: Config) {
         Log.i("=========================================")
 
         core = Factory.instance().createCoreWithConfig(coreConfig, context)
-
         stopped = false
         Log.i("[Context] Ready")
     }
@@ -310,6 +310,13 @@ class CoreContext(val context: Context, coreConfig: Config) {
 
         core.addListener(listener)
 
+        // CoreContext listener must be added first!
+        if (Version.sdkAboveOrEqual(Version.API26_O_80) && corePreferences.useTelecomManager) {
+            Log.i("[Context] Creating TelecomHelper, disabling audio focus requests in AudioHelper")
+            core.config.setBool("audio", "android_disable_audio_focus_requests", true)
+            TelecomHelper.create(context)
+        }
+
         if (isPush) {
             Log.i("[Context] Push received, assume in background")
             core.enterBackground()
@@ -319,9 +326,7 @@ class CoreContext(val context: Context, coreConfig: Config) {
 
         configureCore()
 
-        val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        Log.i("[Context] Registering phone state listener")
-        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
+        initPhoneStateListener()
 
         EmojiCompat.init(BundledEmojiCompatConfig(context))
         collator.strength = Collator.NO_DECOMPOSITION
@@ -331,12 +336,15 @@ class CoreContext(val context: Context, coreConfig: Config) {
         Log.i("[Context] Stopping")
         coroutineScope.cancel()
 
-        val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        Log.i("[Context] Unregistering phone state listener")
-        telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
-
+        if (::phoneStateListener.isInitialized) {
+            phoneStateListener.destroy()
+        }
         notificationsManager.destroy()
         contactsManager.destroy()
+        if (TelecomHelper.exists()) {
+            Log.i("[Context] Destroying telecom helper")
+            TelecomHelper.get().destroy()
+        }
 
         core.stop()
         core.removeListener(listener)
@@ -387,8 +395,8 @@ class CoreContext(val context: Context, coreConfig: Config) {
 
     private fun computeUserAgent() {
         val deviceName: String = corePreferences.deviceName
-        val appName: String = context.resources.getString(R.string.app_name)
-        val androidVersion = org.linphone.BuildConfig.VERSION_NAME
+        val appName: String = context.resources.getString(R.string.user_agent_app_name)
+        val androidVersion = BuildConfig.VERSION_NAME
         val userAgent = "$appName/$androidVersion ($deviceName) LinphoneSDK"
         val sdkVersion = context.getString(R.string.linphone_sdk_version)
         val sdkBranch = context.getString(R.string.linphone_sdk_branch)
@@ -408,6 +416,21 @@ class CoreContext(val context: Context, coreConfig: Config) {
     }
 
     /* Call related functions */
+
+    fun initPhoneStateListener() {
+        if (PermissionHelper.required(context).hasReadPhoneStatePermission()) {
+            try {
+                phoneStateListener =
+                    Compatibility.createPhoneListener(context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager)
+            } catch (exception: SecurityException) {
+                val hasReadPhoneStatePermission =
+                    PermissionHelper.get().hasReadPhoneStateOrPhoneNumbersPermission()
+                Log.e("[Context] Failed to create phone state listener: $exception, READ_PHONE_STATE permission status is $hasReadPhoneStatePermission")
+            }
+        } else {
+            Log.w("[Context] Can't create phone state listener, READ_PHONE_STATE permission isn't granted")
+        }
+    }
 
     fun answerCallVideoUpdateRequest(call: Call, accept: Boolean) {
         val params = core.createCallParams(call)
@@ -519,6 +542,10 @@ class CoreContext(val context: Context, coreConfig: Config) {
             }
         }
 
+        if (corePreferences.sendEarlyMedia) {
+            params.enableEarlyMediaSending(true)
+        }
+
         val call = core.inviteAddressWithParams(address, params)
         Log.i("[Context] Starting call $call")
     }
@@ -597,7 +624,8 @@ class CoreContext(val context: Context, coreConfig: Config) {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (abs(overlayX - params.x) < CorePreferences.OVERLAY_CLICK_SENSITIVITY &&
-                        abs(overlayY - params.y) < CorePreferences.OVERLAY_CLICK_SENSITIVITY) {
+                        abs(overlayY - params.y) < CorePreferences.OVERLAY_CLICK_SENSITIVITY
+                    ) {
                         view.performClick()
                     }
                     overlayX = params.x.toFloat()
@@ -653,7 +681,7 @@ class CoreContext(val context: Context, coreConfig: Config) {
             return
         }
 
-        if (Version.sdkAboveOrEqual(Version.API29_ANDROID_10) || PermissionHelper.get().hasWriteExternalStorage()) {
+        if (Version.sdkAboveOrEqual(Version.API29_ANDROID_10) || PermissionHelper.get().hasWriteExternalStoragePermission()) {
             for (content in message.contents) {
                 if (content.isFile && content.filePath != null && content.userData == null) {
                     addContentToMediaStore(content)
@@ -674,7 +702,7 @@ class CoreContext(val context: Context, coreConfig: Config) {
             return
         }
 
-        if (Version.sdkAboveOrEqual(Version.API29_ANDROID_10) || PermissionHelper.get().hasWriteExternalStorage()) {
+        if (Version.sdkAboveOrEqual(Version.API29_ANDROID_10) || PermissionHelper.get().hasWriteExternalStoragePermission()) {
             coroutineScope.launch {
                 when (content.type) {
                     "image" -> {
@@ -854,11 +882,16 @@ class CoreContext(val context: Context, coreConfig: Config) {
         fun activateVFS() {
             try {
                 Log.i("[Context] Activating VFS")
+                val preferences = corePreferences.encryptedSharedPreferences
+                if (preferences == null) {
+                    Log.e("[Context] Can't get encrypted SharedPreferences, can't init VFS")
+                    return
+                }
 
-                if (corePreferences.encryptedSharedPreferences.getString(VFS_IV, null) == null) {
+                if (preferences.getString(VFS_IV, null) == null) {
                     generateSecretKey()
                     encryptToken(generateToken()).let { data ->
-                        corePreferences.encryptedSharedPreferences
+                        preferences
                             .edit()
                             .putString(VFS_IV, data.first)
                             .putString(VFS_KEY, data.second)
@@ -867,7 +900,7 @@ class CoreContext(val context: Context, coreConfig: Config) {
                 }
                 Factory.instance().setVfsEncryption(
                     LINPHONE_VFS_ENCRYPTION_AES256GCM128_SHA256,
-                    getVfsKey(corePreferences.encryptedSharedPreferences).toByteArray().copyOfRange(0, 32),
+                    getVfsKey(preferences).toByteArray().copyOfRange(0, 32),
                     32
                 )
 

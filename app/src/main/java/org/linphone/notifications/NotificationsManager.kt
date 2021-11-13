@@ -105,6 +105,8 @@ class NotificationsManager(private val context: Context) {
 
     var currentlyDisplayedChatRoomAddress: String? = null
 
+    var dismissNotificationUponReadChatRoom: Boolean = true
+
     private val listener: CoreListenerStub = object : CoreListenerStub() {
         override fun onCallStateChanged(
             core: Core,
@@ -140,8 +142,8 @@ class NotificationsManager(private val context: Context) {
             }
 
             if (currentlyDisplayedChatRoomAddress == room.peerAddress.asStringUriOnly()) {
-                Log.i("[Notifications Manager] Chat room is currently displayed, do not notify received message & mark it as read")
-                room.markAsRead()
+                Log.i("[Notifications Manager] Chat room is currently displayed, do not notify received message")
+                // Mark as read is now done in the DetailChatRoomFragment
                 return
             }
 
@@ -151,8 +153,9 @@ class NotificationsManager(private val context: Context) {
             }
 
             if (message.contents.find { content ->
-                    content.isFile or content.isFileTransfer or content.isText
-                } == null) {
+                content.isFile or content.isFileTransfer or content.isText
+            } == null
+            ) {
                 Log.w("[Notifications Manager] Received message with neither text or attachment, do not notify")
                 return
             }
@@ -165,8 +168,12 @@ class NotificationsManager(private val context: Context) {
         }
 
         override fun onChatRoomRead(core: Core, chatRoom: ChatRoom) {
-            Log.i("[Notifications Manager] Chat room [$chatRoom] has been marked as read, removing notification if any")
-            dismissChatNotification(chatRoom)
+            if (dismissNotificationUponReadChatRoom) {
+                Log.i("[Notifications Manager] Chat room [$chatRoom] has been marked as read, removing notification if any")
+                dismissChatNotification(chatRoom)
+            } else {
+                Log.i("[Notifications Manager] Chat room [$chatRoom] has been marked as read, not removing notification, maybe because of a chat bubble?")
+            }
         }
     }
 
@@ -291,7 +298,7 @@ class NotificationsManager(private val context: Context) {
             currentForegroundServiceNotificationId = notificationId
             service?.startForeground(currentForegroundServiceNotificationId, callNotification)
         }
-   }
+    }
 
     private fun stopForegroundNotification() {
         if (service != null) {
@@ -396,7 +403,12 @@ class NotificationsManager(private val context: Context) {
 
         val incomingCallNotificationIntent = Intent(context, IncomingCallActivity::class.java)
         incomingCallNotificationIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val pendingIntent = PendingIntent.getActivity(context, 0, incomingCallNotificationIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            incomingCallNotificationIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val notificationLayoutHeadsUp = RemoteViews(context.packageName, R.layout.call_incoming_notification_heads_up)
         notificationLayoutHeadsUp.setTextViewText(R.id.caller, displayName)
@@ -462,7 +474,8 @@ class NotificationsManager(private val context: Context) {
             .createPendingIntent()
 
         val builder = NotificationCompat.Builder(
-            context, context.getString(R.string.notification_channel_missed_call_id))
+            context, context.getString(R.string.notification_channel_missed_call_id)
+        )
             .setContentTitle(context.getString(R.string.missed_call_notification_title))
             .setContentText(body)
             .setSmallIcon(R.drawable.topbar_missed_call_notification)
@@ -543,10 +556,16 @@ class NotificationsManager(private val context: Context) {
 
         val callNotificationIntent = Intent(context, callActivity)
         callNotificationIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val pendingIntent = PendingIntent.getActivity(context, 0, callNotificationIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            callNotificationIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val builder = NotificationCompat.Builder(
-            context, channelToUse)
+            context, channelToUse
+        )
             .setContentTitle(contact?.fullName ?: displayName)
             .setContentText(context.getString(stringResourceId))
             .setSmallIcon(iconResourceId)
@@ -606,12 +625,18 @@ class NotificationsManager(private val context: Context) {
             .setArguments(args)
             .createPendingIntent()
 
+        // PendingIntents attached to bubbles must be mutable
         val target = Intent(context, ChatBubbleActivity::class.java)
         target.putExtra("RemoteSipUri", peerAddress)
         target.putExtra("LocalSipUri", localAddress)
-        val bubbleIntent = PendingIntent.getActivity(context, notifiable.notificationId, target, PendingIntent.FLAG_UPDATE_CURRENT)
+        val bubbleIntent = PendingIntent.getActivity(
+            context,
+            notifiable.notificationId,
+            target,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
 
-        val id = LinphoneUtils.getChatRoomId(localAddress, peerAddress)
+        val id = LinphoneUtils.getChatRoomId(room.localAddress, room.peerAddress)
         val notification = createMessageNotification(notifiable, pendingIntent, bubbleIntent, id)
         notify(notifiable.notificationId, notification)
     }
@@ -624,7 +649,7 @@ class NotificationsManager(private val context: Context) {
             val notifiableMessage = getNotifiableMessage(message, contact)
             notifiable.messages.add(notifiableMessage)
         } else {
-            for (chatMessage in room.getUnreadHistory()) {
+            for (chatMessage in room.unreadHistory) {
                 val notifiableMessage = getNotifiableMessage(chatMessage, contact)
                 notifiable.messages.add(notifiableMessage)
             }
@@ -813,7 +838,10 @@ class NotificationsManager(private val context: Context) {
         answerIntent.putExtra(INTENT_REMOTE_ADDRESS, notifiable.remoteAddress)
 
         val answerPendingIntent = PendingIntent.getBroadcast(
-            context, notifiable.notificationId, answerIntent, PendingIntent.FLAG_UPDATE_CURRENT
+            context,
+            notifiable.notificationId,
+            answerIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         return NotificationCompat.Action.Builder(
@@ -830,7 +858,10 @@ class NotificationsManager(private val context: Context) {
         hangupIntent.putExtra(INTENT_REMOTE_ADDRESS, notifiable.remoteAddress)
 
         val hangupPendingIntent = PendingIntent.getBroadcast(
-            context, notifiable.notificationId, hangupIntent, PendingIntent.FLAG_UPDATE_CURRENT
+            context,
+            notifiable.notificationId,
+            hangupIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         return NotificationCompat.Action.Builder(
@@ -852,11 +883,12 @@ class NotificationsManager(private val context: Context) {
         replyIntent.putExtra(INTENT_LOCAL_IDENTITY, notifiable.localIdentity)
         replyIntent.putExtra(INTENT_REMOTE_ADDRESS, notifiable.remoteAddress)
 
+        // PendingIntents attached to actions with remote inputs must be mutable
         val replyPendingIntent = PendingIntent.getBroadcast(
             context,
             notifiable.notificationId,
             replyIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
         return NotificationCompat.Action.Builder(
             R.drawable.chat_send_over,
@@ -880,7 +912,7 @@ class NotificationsManager(private val context: Context) {
             context,
             notifiable.notificationId,
             markAsReadIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
 

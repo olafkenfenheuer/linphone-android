@@ -39,7 +39,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.findNavController
-import androidx.window.FoldingFeature
+import androidx.window.layout.FoldingFeature
 import com.google.android.material.snackbar.Snackbar
 import java.io.UnsupportedEncodingException
 import java.net.URLDecoder
@@ -115,27 +115,33 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
         binding = DataBindingUtil.setContentView(this, R.layout.main_activity)
         binding.lifecycleOwner = this
 
-        sharedViewModel = ViewModelProvider(this).get(SharedMainViewModel::class.java)
+        sharedViewModel = ViewModelProvider(this)[SharedMainViewModel::class.java]
         binding.viewModel = sharedViewModel
 
-        callOverlayViewModel = ViewModelProvider(this).get(CallOverlayViewModel::class.java)
+        callOverlayViewModel = ViewModelProvider(this)[CallOverlayViewModel::class.java]
         binding.callOverlayViewModel = callOverlayViewModel
 
-        sharedViewModel.toggleDrawerEvent.observe(this, {
-            it.consume {
-                if (binding.sideMenu.isDrawerOpen(Gravity.LEFT)) {
-                    binding.sideMenu.closeDrawer(binding.sideMenuContent, true)
-                } else {
-                    binding.sideMenu.openDrawer(binding.sideMenuContent, true)
+        sharedViewModel.toggleDrawerEvent.observe(
+            this,
+            {
+                it.consume {
+                    if (binding.sideMenu.isDrawerOpen(Gravity.LEFT)) {
+                        binding.sideMenu.closeDrawer(binding.sideMenuContent, true)
+                    } else {
+                        binding.sideMenu.openDrawer(binding.sideMenuContent, true)
+                    }
                 }
             }
-        })
+        )
 
-        coreContext.callErrorMessageResourceId.observe(this, {
-            it.consume { message ->
-                showSnackBar(message)
+        coreContext.callErrorMessageResourceId.observe(
+            this,
+            {
+                it.consume { message ->
+                    showSnackBar(message)
+                }
             }
-        })
+        )
 
         if (coreContext.core.accountList.isEmpty()) {
             if (corePreferences.firstStart) {
@@ -176,6 +182,7 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
+
         registerComponentCallbacks(componentCallbacks)
         findNavController(R.id.nav_host_fragment).addOnDestinationChangedListener(this)
 
@@ -217,18 +224,6 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
 
     private fun updateTabsFragmentVisibility() {
         tabsFragment.visibility = if (tabsFragmentVisible1 && tabsFragmentVisible2) View.VISIBLE else View.GONE
-    }
-
-    fun showTabsFragment() {
-        tabsFragment.visibility = View.VISIBLE
-    }
-
-    fun hideTabsFragment() {
-        tabsFragment.visibility = View.GONE
-    }
-
-    fun hideStatusFragment() {
-        statusFragment.visibility = View.GONE
     }
 
     private fun View.hideKeyboard() {
@@ -294,16 +289,15 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
                     intent.hasExtra("Chat") -> {
                         if (corePreferences.disableChat) return
 
-                        val deepLink = if (intent.hasExtra("RemoteSipUri") && intent.hasExtra("LocalSipUri")) {
+                        if (intent.hasExtra("RemoteSipUri") && intent.hasExtra("LocalSipUri")) {
                             val peerAddress = intent.getStringExtra("RemoteSipUri")
                             val localAddress = intent.getStringExtra("LocalSipUri")
                             Log.i("[Main Activity] Found chat room intent extra: local SIP URI=[$localAddress], peer SIP URI=[$peerAddress]")
-                            "linphone-android://chat-room/$localAddress/$peerAddress"
+                            findNavController(R.id.nav_host_fragment).navigate(Uri.parse("linphone-android://chat-room/$localAddress/$peerAddress"))
                         } else {
                             Log.i("[Main Activity] Found chat intent extra, go to chat rooms list")
-                            "linphone-android://chat/"
+                            findNavController(R.id.nav_host_fragment).navigate(R.id.action_global_masterChatRoomsFragment)
                         }
-                        findNavController(R.id.nav_host_fragment).navigate(Uri.parse(deepLink))
                     }
                     intent.hasExtra("Dialer") -> {
                         Log.i("[Main Activity] Found dialer intent extra, go to dialer")
@@ -445,9 +439,8 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
                 Log.i("[Main Activity] Found shortcut ID: $shortcutId")
                 handleLocusOrShortcut(shortcutId)
             } else {
-                val deepLink = "linphone-android://chat/"
-                Log.i("[Main Activity] Starting deep link: $deepLink")
-                findNavController(R.id.nav_host_fragment).navigate(Uri.parse(deepLink))
+                Log.i("[Main Activity] Going into chat rooms list")
+                findNavController(R.id.nav_host_fragment).navigate(R.id.action_global_masterChatRoomsFragment)
             }
         }
     }
@@ -461,6 +454,7 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
             findNavController(R.id.nav_host_fragment).navigate(Uri.parse(deepLink))
         } else {
             Log.e("[Main Activity] Failed to parse shortcut/locus id: $id")
+            findNavController(R.id.nav_host_fragment).navigate(R.id.action_global_masterChatRoomsFragment)
         }
     }
 
@@ -486,7 +480,8 @@ class MainActivity : GenericActivity(), SnackBarActivity, NavController.OnDestin
                 }
                 MotionEvent.ACTION_UP -> {
                     if (abs(initPosX - view.x) < CorePreferences.OVERLAY_CLICK_SENSITIVITY &&
-                        abs(initPosY - view.y) < CorePreferences.OVERLAY_CLICK_SENSITIVITY) {
+                        abs(initPosY - view.y) < CorePreferences.OVERLAY_CLICK_SENSITIVITY
+                    ) {
                         view.performClick()
                     }
                 }

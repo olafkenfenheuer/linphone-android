@@ -41,33 +41,36 @@ class RemoteProvisioningFragment : GenericFragment<AssistantRemoteProvisioningFr
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedAssistantViewModel::class.java)
+            ViewModelProvider(this)[SharedAssistantViewModel::class.java]
         }
 
-        viewModel = ViewModelProvider(this).get(RemoteProvisioningViewModel::class.java)
+        viewModel = ViewModelProvider(this)[RemoteProvisioningViewModel::class.java]
         binding.viewModel = viewModel
 
         binding.setQrCodeClickListener {
             navigateToQrCode()
         }
 
-        viewModel.fetchSuccessfulEvent.observe(viewLifecycleOwner, {
-            it.consume { success ->
-                if (success) {
-                    if (coreContext.core.isEchoCancellerCalibrationRequired) {
-                        navigateToEchoCancellerCalibration()
+        viewModel.fetchSuccessfulEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { success ->
+                    if (success) {
+                        if (coreContext.core.isEchoCancellerCalibrationRequired) {
+                            navigateToEchoCancellerCalibration()
+                        } else {
+                            requireActivity().finish()
+                        }
                     } else {
-                        requireActivity().finish()
+                        val activity = requireActivity() as AssistantActivity
+                        activity.showSnackBar(R.string.assistant_remote_provisioning_failure)
                     }
-                } else {
-                    val activity = requireActivity() as AssistantActivity
-                    activity.showSnackBar(R.string.assistant_remote_provisioning_failure)
                 }
             }
-        })
+        )
 
         viewModel.urlToFetch.value = sharedViewModel.remoteProvisioningUrl.value ?: coreContext.core.provisioningUri
     }

@@ -47,10 +47,10 @@ class ImdnFragment : SecureFragment<ChatRoomImdnFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedMainViewModel::class.java)
+            ViewModelProvider(this)[SharedMainViewModel::class.java]
         }
 
         val chatRoom = sharedViewModel.selectedChatRoom.value
@@ -97,9 +97,12 @@ class ImdnFragment : SecureFragment<ChatRoomImdnFragmentBinding>() {
         val headerItemDecoration = RecyclerViewHeaderDecoration(requireContext(), adapter)
         binding.participantsList.addItemDecoration(headerItemDecoration)
 
-        viewModel.participants.observe(viewLifecycleOwner, {
-            adapter.submitList(it)
-        })
+        viewModel.participants.observe(
+            viewLifecycleOwner,
+            {
+                adapter.submitList(it)
+            }
+        )
 
         binding.setBackClickListener {
             goBack()

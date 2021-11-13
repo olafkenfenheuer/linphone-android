@@ -24,16 +24,19 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.addCallback
+import androidx.core.view.doOnPreDraw
 import androidx.databinding.DataBindingUtil
 import androidx.databinding.ViewDataBinding
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
+import com.google.android.material.transition.MaterialSharedAxis
+import org.linphone.LinphoneApplication.Companion.corePreferences
 import org.linphone.core.tools.Log
 
 abstract class GenericFragment<T : ViewDataBinding> : Fragment() {
     private var _binding: T? = null
     protected val binding get() = _binding!!
+    protected var useMaterialSharedAxisXForwardAnimation = true
 
     protected val onBackPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
@@ -52,10 +55,28 @@ abstract class GenericFragment<T : ViewDataBinding> : Fragment() {
         return _binding!!.root
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onResume() {
+        super.onResume()
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, onBackPressedCallback)
+    }
 
-        requireActivity().onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
+    override fun onPause() {
+        onBackPressedCallback.remove()
+        super.onPause()
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        if (useMaterialSharedAxisXForwardAnimation && corePreferences.enableAnimations) {
+            enterTransition = MaterialSharedAxis(MaterialSharedAxis.X, true)
+            reenterTransition = MaterialSharedAxis(MaterialSharedAxis.X, true)
+            returnTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
+            exitTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
+
+            postponeEnterTransition()
+            binding.root.doOnPreDraw { startPostponedEnterTransition() }
+        }
     }
 
     override fun onDestroyView() {
@@ -72,7 +93,7 @@ abstract class GenericFragment<T : ViewDataBinding> : Fragment() {
                 }
             }
         } catch (ise: IllegalStateException) {
-            Log.e("[Generic Fragment] Can't go back: $ise")
+            Log.e("[Generic Fragment] [$this] Can't go back: $ise")
             onBackPressedCallback.isEnabled = false
             requireActivity().onBackPressed()
         }

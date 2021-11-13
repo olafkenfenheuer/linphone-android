@@ -42,21 +42,24 @@ class QrCodeFragment : GenericFragment<AssistantQrCodeFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedAssistantViewModel::class.java)
+            ViewModelProvider(this)[SharedAssistantViewModel::class.java]
         }
 
-        viewModel = ViewModelProvider(this).get(QrCodeViewModel::class.java)
+        viewModel = ViewModelProvider(this)[QrCodeViewModel::class.java]
         binding.viewModel = viewModel
 
-        viewModel.qrCodeFoundEvent.observe(viewLifecycleOwner, {
-            it.consume { url ->
-                sharedViewModel.remoteProvisioningUrl.value = url
-                findNavController().navigateUp()
+        viewModel.qrCodeFoundEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { url ->
+                    sharedViewModel.remoteProvisioningUrl.value = url
+                    findNavController().navigateUp()
+                }
             }
-        })
+        )
         viewModel.setBackCamera()
 
         if (!PermissionHelper.required(requireContext()).hasCameraPermission()) {

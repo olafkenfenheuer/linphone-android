@@ -36,7 +36,8 @@ class ListTopBarFragment : GenericFragment<ListEditTopBarFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
+        useMaterialSharedAxisXForwardAnimation = false
 
         viewModel = ViewModelProvider(parentFragment ?: this)[ListTopBarViewModel::class.java]
         binding.viewModel = viewModel
@@ -56,5 +57,7 @@ class ListTopBarFragment : GenericFragment<ListEditTopBarFragmentBinding>() {
         binding.setDeleteClickListener {
             viewModel.deleteSelectionEvent.value = Event(true)
         }
+
+        onBackPressedCallback.isEnabled = false
     }
 }

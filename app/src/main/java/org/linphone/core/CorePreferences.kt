@@ -26,6 +26,7 @@ import androidx.security.crypto.MasterKey
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.security.KeyStoreException
 import org.linphone.LinphoneApplication.Companion.coreContext
 import org.linphone.compatibility.Compatibility
 import org.linphone.core.tools.Log
@@ -46,26 +47,38 @@ class CorePreferences constructor(private val context: Context) {
         private const val encryptedSharedPreferencesFile = "encrypted.pref"
     }
 
-    val encryptedSharedPreferences: SharedPreferences by lazy {
+    val encryptedSharedPreferences: SharedPreferences? by lazy {
         val masterKey: MasterKey = MasterKey.Builder(
             context,
             MasterKey.DEFAULT_MASTER_KEY_ALIAS
         ).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
-        EncryptedSharedPreferences.create(
-            context, encryptedSharedPreferencesFile, masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        try {
+            EncryptedSharedPreferences.create(
+                context, encryptedSharedPreferencesFile, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (kse: KeyStoreException) {
+            Log.e("[VFS] Keystore exception: $kse")
+            null
+        }
     }
 
     var vfsEnabled: Boolean
-        get() = encryptedSharedPreferences.getBoolean("vfs_enabled", false)
+        get() = encryptedSharedPreferences?.getBoolean("vfs_enabled", false) ?: false
         set(value) {
-            if (!value && encryptedSharedPreferences.getBoolean("vfs_enabled", false)) {
+            val preferences = encryptedSharedPreferences
+            if (preferences == null) {
+                Log.e("[VFS] Failed to get encrypted SharedPreferences")
+                return
+            }
+
+            if (!value && preferences.getBoolean("vfs_enabled", false)) {
                 Log.w("[VFS] It is not possible to disable VFS once it has been enabled")
                 return
             }
-            encryptedSharedPreferences.edit().putBoolean("vfs_enabled", value).apply()
+
+            preferences.edit().putBoolean("vfs_enabled", value)?.apply()
             // When VFS is enabled we disable logcat output for linphone logs
             // TODO: decide if we do it
             // logcatLogsOutput = false
@@ -245,6 +258,12 @@ class CorePreferences constructor(private val context: Context) {
 
     /* Call */
 
+    var sendEarlyMedia: Boolean
+        get() = config.getBool("sip", "outgoing_calls_early_media", false)
+        set(value) {
+            config.setBool("sip", "outgoing_calls_early_media", value)
+        }
+
     var acceptEarlyMedia: Boolean
         get() = config.getBool("sip", "incoming_calls_early_media", false)
         set(value) {
@@ -287,6 +306,15 @@ class CorePreferences constructor(private val context: Context) {
         get() = config.getBool("app", "auto_start_call_record", false)
         set(value) {
             config.setBool("app", "auto_start_call_record", value)
+        }
+
+    var useTelecomManager: Boolean
+        // Some permissions are required, so keep it to false so user has to manually enable it and give permissions
+        get() = config.getBool("app", "use_self_managed_telecom_manager", false)
+        set(value) {
+            config.setBool("app", "use_self_managed_telecom_manager", value)
+            // We need to disable audio focus requests when enabling telecom manager, otherwise it creates conflicts
+            config.setBool("audio", "android_disable_audio_focus_requests", value)
         }
 
     var fullScreenCallUI: Boolean
@@ -417,6 +445,9 @@ class CorePreferences constructor(private val context: Context) {
     val voiceMessagesFormatMkv: Boolean
         get() = config.getBool("app", "record_voice_messages_in_mkv_format", true)
 
+    val useEphemeralPerDeviceMode: Boolean
+        get() = config.getBool("app", "ephemeral_chat_messages_settings_per_device", true)
+
     /* Default values related */
 
     val echoCancellerCalibration: Int
@@ -449,7 +480,7 @@ class CorePreferences constructor(private val context: Context) {
         get() = config.getString(
             "misc",
             "version_check_url_root",
-            "https://linphone.org/releases/android/RELEASE"
+            "https://download.linphone.org/releases/android/RELEASE"
         )
 
     val checkUpdateAvailableInterval: Int

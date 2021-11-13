@@ -35,9 +35,10 @@ class StatisticsFragment : GenericFragment<CallStatisticsFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
+        useMaterialSharedAxisXForwardAnimation = false
 
-        viewModel = ViewModelProvider(this).get(StatisticsListViewModel::class.java)
+        viewModel = ViewModelProvider(this)[StatisticsListViewModel::class.java]
         binding.viewModel = viewModel
     }
 

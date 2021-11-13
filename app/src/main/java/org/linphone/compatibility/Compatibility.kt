@@ -26,12 +26,14 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Vibrator
+import android.telephony.TelephonyManager
 import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationManagerCompat
 import org.linphone.core.ChatRoom
 import org.linphone.core.Content
 import org.linphone.mediastream.Version
+import org.linphone.telecom.NativeCallWrapper
 
 @Suppress("DEPRECATION")
 class Compatibility {
@@ -43,10 +45,36 @@ class Compatibility {
             }
         }
 
+        // See https://developer.android.com/about/versions/11/privacy/permissions#phone-numbers
+        fun hasReadPhoneStateOrNumbersPermission(context: Context): Boolean {
+            return if (Version.sdkAboveOrEqual(Version.API30_ANDROID_11)) {
+                Api30Compatibility.hasReadPhoneNumbersPermission(context)
+            } else {
+                Api29Compatibility.hasReadPhoneStatePermission(context)
+            }
+        }
+
+        // See https://developer.android.com/about/versions/11/privacy/permissions#phone-numbers
+        fun requestReadPhoneStateOrNumbersPermission(activity: Activity, code: Int) {
+            if (Version.sdkAboveOrEqual(Version.API30_ANDROID_11)) {
+                Api30Compatibility.requestReadPhoneNumbersPermission(activity, code)
+            } else {
+                Api29Compatibility.requestReadPhoneStatePermission(activity, code)
+            }
+        }
+
         fun getDeviceName(context: Context): String {
             return when (Version.sdkAboveOrEqual(Version.API25_NOUGAT_71)) {
                 true -> Api25Compatibility.getDeviceName(context)
                 else -> Api21Compatibility.getDeviceName(context)
+            }
+        }
+
+        fun createPhoneListener(telephonyManager: TelephonyManager): PhoneStateInterface {
+            return if (Version.sdkStrictlyBelow(Version.API31_ANDROID_12)) {
+                PhoneStateListener(telephonyManager)
+            } else {
+                TelephonyListener(telephonyManager)
             }
         }
 
@@ -139,6 +167,12 @@ class Compatibility {
                 Api26Compatibility.eventVibration(vibrator)
             } else {
                 Api21Compatibility.eventVibration(vibrator)
+            }
+        }
+
+        fun changeAudioRouteForTelecomManager(connection: NativeCallWrapper, route: Int) {
+            if (Version.sdkAboveOrEqual(Version.API26_O_80)) {
+                Api26Compatibility.changeAudioRouteForTelecomManager(connection, route)
             }
         }
 

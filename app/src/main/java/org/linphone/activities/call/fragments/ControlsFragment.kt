@@ -65,116 +65,153 @@ class ControlsFragment : GenericFragment<CallControlsFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
+        binding.lifecycleOwner = viewLifecycleOwner
+        useMaterialSharedAxisXForwardAnimation = false
 
         sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedCallViewModel::class.java)
+            ViewModelProvider(this)[SharedCallViewModel::class.java]
         }
 
-        callsViewModel = ViewModelProvider(this).get(CallsViewModel::class.java)
+        callsViewModel = requireActivity().run {
+            ViewModelProvider(this)[CallsViewModel::class.java]
+        }
         binding.viewModel = callsViewModel
 
-        controlsViewModel = ViewModelProvider(this).get(ControlsViewModel::class.java)
+        controlsViewModel = requireActivity().run {
+            ViewModelProvider(this)[ControlsViewModel::class.java]
+        }
         binding.controlsViewModel = controlsViewModel
 
-        conferenceViewModel = ViewModelProvider(this).get(ConferenceViewModel::class.java)
+        conferenceViewModel = requireActivity().run {
+            ViewModelProvider(this)[ConferenceViewModel::class.java]
+        }
         binding.conferenceViewModel = conferenceViewModel
 
-        callsViewModel.currentCallViewModel.observe(viewLifecycleOwner, {
-            if (it != null) {
-                binding.activeCallTimer.base =
-                    SystemClock.elapsedRealtime() - (1000 * it.call.duration) // Linphone timestamps are in seconds
-                binding.activeCallTimer.start()
-            }
-        })
-
-        callsViewModel.noMoreCallEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                requireActivity().finish()
-            }
-        })
-
-        callsViewModel.askWriteExternalStoragePermissionEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                if (!PermissionHelper.get().hasWriteExternalStorage()) {
-                    Log.i("[Controls Fragment] Asking for WRITE_EXTERNAL_STORAGE permission")
-                    requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
+        callsViewModel.currentCallViewModel.observe(
+            viewLifecycleOwner,
+            {
+                if (it != null) {
+                    binding.activeCallTimer.base =
+                        SystemClock.elapsedRealtime() - (1000 * it.call.duration) // Linphone timestamps are in seconds
+                    binding.activeCallTimer.start()
                 }
             }
-        })
+        )
 
-        callsViewModel.callUpdateEvent.observe(viewLifecycleOwner, {
-            it.consume { call ->
-                if (call.state == Call.State.StreamsRunning) {
-                    dialog?.dismiss()
-                } else if (call.state == Call.State.UpdatedByRemote) {
-                    if (coreContext.core.videoCaptureEnabled() || coreContext.core.videoDisplayEnabled()) {
-                        if (call.currentParams.videoEnabled() != call.remoteParams?.videoEnabled()) {
-                            showCallVideoUpdateDialog(call)
+        callsViewModel.noMoreCallEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    requireActivity().finish()
+                }
+            }
+        )
+
+        callsViewModel.askWriteExternalStoragePermissionEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    if (!PermissionHelper.get().hasWriteExternalStoragePermission()) {
+                        Log.i("[Controls Fragment] Asking for WRITE_EXTERNAL_STORAGE permission")
+                        requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
+                    }
+                }
+            }
+        )
+
+        callsViewModel.callUpdateEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { call ->
+                    if (call.state == Call.State.StreamsRunning) {
+                        dialog?.dismiss()
+                    } else if (call.state == Call.State.UpdatedByRemote) {
+                        if (coreContext.core.videoCaptureEnabled() || coreContext.core.videoDisplayEnabled()) {
+                            if (call.currentParams.videoEnabled() != call.remoteParams?.videoEnabled()) {
+                                showCallVideoUpdateDialog(call)
+                            }
+                        } else {
+                            Log.w("[Controls Fragment] Video display & capture are disabled, don't show video dialog")
                         }
-                    } else {
-                        Log.w("[Controls Fragment] Video display & capture are disabled, don't show video dialog")
                     }
                 }
             }
-        })
+        )
 
-        controlsViewModel.chatClickedEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                val intent = Intent()
-                intent.setClass(requireContext(), MainActivity::class.java)
-                intent.putExtra("Chat", true)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
+        controlsViewModel.chatClickedEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    val intent = Intent()
+                    intent.setClass(requireContext(), MainActivity::class.java)
+                    intent.putExtra("Chat", true)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                }
             }
-        })
+        )
 
-        controlsViewModel.addCallClickedEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                val intent = Intent()
-                intent.setClass(requireContext(), MainActivity::class.java)
-                intent.putExtra("Dialer", true)
-                intent.putExtra("Transfer", false)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
+        controlsViewModel.addCallClickedEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    val intent = Intent()
+                    intent.setClass(requireContext(), MainActivity::class.java)
+                    intent.putExtra("Dialer", true)
+                    intent.putExtra("Transfer", false)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                }
             }
-        })
+        )
 
-        controlsViewModel.transferCallClickedEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                val intent = Intent()
-                intent.setClass(requireContext(), MainActivity::class.java)
-                intent.putExtra("Dialer", true)
-                intent.putExtra("Transfer", true)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
+        controlsViewModel.transferCallClickedEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    val intent = Intent()
+                    intent.setClass(requireContext(), MainActivity::class.java)
+                    intent.putExtra("Dialer", true)
+                    intent.putExtra("Transfer", true)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                }
             }
-        })
+        )
 
-        controlsViewModel.askPermissionEvent.observe(viewLifecycleOwner, {
-            it.consume { permission ->
-                Log.i("[Controls Fragment] Asking for $permission permission")
-                requestPermissions(arrayOf(permission), 0)
+        controlsViewModel.askPermissionEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { permission ->
+                    Log.i("[Controls Fragment] Asking for $permission permission")
+                    requestPermissions(arrayOf(permission), 0)
+                }
             }
-        })
+        )
 
-        controlsViewModel.toggleNumpadEvent.observe(viewLifecycleOwner, {
-            it.consume { open ->
-                if (this::numpadAnimator.isInitialized) {
-                    if (open) {
-                        numpadAnimator.start()
-                    } else {
-                        numpadAnimator.reverse()
+        controlsViewModel.toggleNumpadEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume { open ->
+                    if (this::numpadAnimator.isInitialized) {
+                        if (open) {
+                            numpadAnimator.start()
+                        } else {
+                            numpadAnimator.reverse()
+                        }
                     }
                 }
             }
-        })
+        )
 
-        controlsViewModel.somethingClickedEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                sharedViewModel.resetHiddenInterfaceTimerInVideoCallEvent.value = Event(true)
+        controlsViewModel.somethingClickedEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    sharedViewModel.resetHiddenInterfaceTimerInVideoCallEvent.value = Event(true)
+                }
             }
-        })
+        )
 
         if (Version.sdkAboveOrEqual(Version.API23_MARSHMALLOW_60)) {
             checkPermissions()
@@ -245,15 +282,21 @@ class ControlsFragment : GenericFragment<CallControlsFragmentBinding>() {
         val viewModel = DialogViewModel(AppUtils.getString(R.string.call_video_update_requested_dialog))
         dialog = DialogUtils.getDialog(requireContext(), viewModel)
 
-        viewModel.showCancelButton({
-            callsViewModel.answerCallVideoUpdateRequest(call, false)
-            dialog?.dismiss()
-        }, getString(R.string.dialog_decline))
+        viewModel.showCancelButton(
+            {
+                callsViewModel.answerCallVideoUpdateRequest(call, false)
+                dialog?.dismiss()
+            },
+            getString(R.string.dialog_decline)
+        )
 
-        viewModel.showOkButton({
-            callsViewModel.answerCallVideoUpdateRequest(call, true)
-            dialog?.dismiss()
-        }, getString(R.string.dialog_accept))
+        viewModel.showOkButton(
+            {
+                callsViewModel.answerCallVideoUpdateRequest(call, true)
+                dialog?.dismiss()
+            },
+            getString(R.string.dialog_accept)
+        )
 
         dialog?.show()
     }

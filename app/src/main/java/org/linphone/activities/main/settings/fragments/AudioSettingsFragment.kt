@@ -29,18 +29,15 @@ import androidx.lifecycle.ViewModelProvider
 import org.linphone.BR
 import org.linphone.LinphoneApplication.Companion.coreContext
 import org.linphone.R
-import org.linphone.activities.GenericFragment
 import org.linphone.activities.main.settings.SettingListenerStub
 import org.linphone.activities.main.settings.viewmodels.AudioSettingsViewModel
-import org.linphone.activities.main.viewmodels.SharedMainViewModel
 import org.linphone.activities.navigateToEmptySetting
 import org.linphone.core.tools.Log
 import org.linphone.databinding.SettingsAudioFragmentBinding
 import org.linphone.utils.Event
 import org.linphone.utils.PermissionHelper
 
-class AudioSettingsFragment : GenericFragment<SettingsAudioFragmentBinding>() {
-    private lateinit var sharedViewModel: SharedMainViewModel
+class AudioSettingsFragment : GenericSettingFragment<SettingsAudioFragmentBinding>() {
     private lateinit var viewModel: AudioSettingsViewModel
 
     override fun getLayoutId(): Int = R.layout.settings_audio_fragment
@@ -48,31 +45,33 @@ class AudioSettingsFragment : GenericFragment<SettingsAudioFragmentBinding>() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        binding.lifecycleOwner = this
-
-        sharedViewModel = requireActivity().run {
-            ViewModelProvider(this).get(SharedMainViewModel::class.java)
-        }
+        binding.lifecycleOwner = viewLifecycleOwner
         binding.sharedMainViewModel = sharedViewModel
 
-        viewModel = ViewModelProvider(this).get(AudioSettingsViewModel::class.java)
+        viewModel = ViewModelProvider(this)[AudioSettingsViewModel::class.java]
         binding.viewModel = viewModel
 
         binding.setBackClickListener { goBack() }
 
-        viewModel.askAudioRecordPermissionForEchoCancellerCalibrationEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                Log.i("[Audio Settings] Asking for RECORD_AUDIO permission for echo canceller calibration")
-                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+        viewModel.askAudioRecordPermissionForEchoCancellerCalibrationEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    Log.i("[Audio Settings] Asking for RECORD_AUDIO permission for echo canceller calibration")
+                    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+                }
             }
-        })
+        )
 
-        viewModel.askAudioRecordPermissionForEchoTesterEvent.observe(viewLifecycleOwner, {
-            it.consume {
-                Log.i("[Audio Settings] Asking for RECORD_AUDIO permission for echo tester")
-                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2)
+        viewModel.askAudioRecordPermissionForEchoTesterEvent.observe(
+            viewLifecycleOwner,
+            {
+                it.consume {
+                    Log.i("[Audio Settings] Asking for RECORD_AUDIO permission for echo tester")
+                    requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2)
+                }
             }
-        })
+        )
 
         initAudioCodecsList()
 
@@ -107,19 +106,22 @@ class AudioSettingsFragment : GenericFragment<SettingsAudioFragmentBinding>() {
             binding.setVariable(BR.title, payload.mimeType)
             binding.setVariable(BR.subtitle, "${payload.clockRate} Hz")
             binding.setVariable(BR.checked, payload.enabled())
-            binding.setVariable(BR.listener, object : SettingListenerStub() {
-                override fun onBoolValueChanged(newValue: Boolean) {
-                    payload.enable(newValue)
+            binding.setVariable(
+                BR.listener,
+                object : SettingListenerStub() {
+                    override fun onBoolValueChanged(newValue: Boolean) {
+                        payload.enable(newValue)
+                    }
                 }
-            })
-            binding.lifecycleOwner = this
+            )
+            binding.lifecycleOwner = viewLifecycleOwner
             list.add(binding)
         }
         viewModel.audioCodecs.value = list
     }
 
     override fun goBack() {
-        if (sharedViewModel.canSlidingPaneBeClosed.value == true) {
+        if (sharedViewModel.isSlidingPaneSlideable.value == true) {
             sharedViewModel.closeSlidingPaneEvent.value = Event(true)
         } else {
             navigateToEmptySetting()

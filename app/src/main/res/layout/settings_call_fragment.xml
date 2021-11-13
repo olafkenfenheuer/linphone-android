@@ -31,7 +31,7 @@
             <ImageView
                 android:id="@+id/back"
                 android:onClick="@{backClickListener}"
-                android:visibility="@{sharedMainViewModel.canSlidingPaneBeClosed ? View.VISIBLE : View.GONE}"
+                android:visibility="@{sharedMainViewModel.isSlidingPaneSlideable ? View.VISIBLE : View.GONE}"
                 android:contentDescription="@string/content_description_go_back"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -55,7 +55,7 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="0.2"
-                android:visibility="@{sharedMainViewModel.canSlidingPaneBeClosed ? View.INVISIBLE : View.GONE}" />
+                android:visibility="@{sharedMainViewModel.isSlidingPaneSlideable ? View.INVISIBLE : View.GONE}" />
 
         </LinearLayout>
 
@@ -94,6 +94,15 @@
                     linphone:listener="@{viewModel.encryptionMandatoryListener}"
                     linphone:checked="@={viewModel.encryptionMandatory}"
                     linphone:enabled="@{viewModel.encryptionIndex != 0}" />
+
+                <include
+                    layout="@layout/settings_widget_switch"
+                    linphone:title="@{@string/call_settings_use_telecom_manager_title}"
+                    linphone:subtitle="@{@string/call_settings_use_telecom_manager_summary}"
+                    android:visibility="@{viewModel.api26OrHigher ? View.VISIBLE : View.GONE}"
+                    linphone:listener="@{viewModel.useTelecomManagerListener}"
+                    linphone:checked="@={viewModel.useTelecomManager}"/>
+
                 <include
                     layout="@layout/settings_widget_switch"
                     linphone:title="@{@string/call_settings_full_screen_title}"
